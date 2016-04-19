@@ -42,44 +42,113 @@ To submit your homework:
 
 """
 
+import re
 
-def add(*args):
-    """ Returns a STRING with the sum of the arguments """
 
-    # TODO: Fill sum with the correct value, based on the
-    # args provided.
-    sum = "0"
+class CalculatorBadRequestURLExc(Exception):
+    """ A simple class that can be thrown as an exception when
+        a URL that can't be processed is encountered.
+    """
+    pass
 
-    return sum
+class CalculatorBadRequestDivBy0Exc(Exception):
+    """ A simple class that can be thrown as an exception when
+        a divide-by-0 situation is encountered.
+    """
+    pass
 
-# TODO: Add functions for handling more arithmetic operations.
+
+def usage(*args):
+    """ Returns a usage string for how to use this web calculator
+
+    :param args: Unused
+    :return: A string of HTML to indicate how to use the calculator
+    """
+    body = "<h1>Welcome to the Calculator<br></h1>"
+    body += "<h2>So, you want to do some math huh. Well, here is how to use this web app to do it!<br></h2>"
+    body += "Usage:<br>"
+    body += "    http://localhost:8080/opr/op1/op2<br>"
+    body += "<br>"
+    body += "Where:<br>"
+    body += "    'opr' can be one of add, subtract, multiply or divide<br>"
+    body += "    'op1/op2' are the signed floating point operands you want evaluated<br>"
+    return body
+
 
 def resolve_path(path):
     """
-    Should return two values: a callable and an iterable of
-    arguments.
+    Resolves the WSGI path into the function to call and the arguments
+    to call the function with.
     """
+    # First, trap for the special case of getting the usage informatoin
+    if len(path) == 1 and path[0] == "/":
+        func = usage
+        args = []
+    else:
+        # Lets get the re module to do the work of parsing out the
+        # items of interest from the path by using capturing groups.
+        match = re.match(r"/(?P<opr>add|subtract|multiply|divide)/(?P<op1>[0-9\.\+\-]+)/(?P<op2>[0-9\.\+\-]+)",
+                         path,
+                         re.IGNORECASE)
 
-    # TODO: Provide correct values for func and args. The
-    # examples provide the correct *syntax*, but you should
-    # determine the actual values of func and args using the
-    # path.
-    func = add
-    args = ['25', '32']
+        # Validate what was passed in to make sure it is legal.
+        if match is None:
+            # An invalid query was specified by the user.
+            raise CalculatorBadRequestURLExc()
+        elif (match.groupdict()['opr'].lower() in "divide") and float(match.groupdict()['op2']) == 0:
+            # Invalid request to divide-by-0
+            raise CalculatorBadRequestDivBy0Exc()
+
+        # Why reinvent the wheel, just use the math operators provided by the
+        # float class instead of writing our own. As a side effect, the
+        # calculator can then also do floating point math.
+        fn_dict = {'add'     : float.__add__,
+                   'subtract': float.__sub__,
+                   'multiply': float.__mul__,
+                   'divide'  : float.__truediv__}
+
+        # Return the function to call from the fn_dict based on the operator supplied.
+        func = fn_dict[match.groupdict()['opr'].lower()]
+        args = [float(match.groupdict()['op1']), float(match.groupdict()['op2'])]
 
     return func, args
 
 def application(environ, start_response):
-    # TODO: Your application code from the book database
-    # work here as well! Remember that your application must
-    # invoke start_response(status, headers) and also return
-    # the body of the response in BYTE encoding.
-    #
-    # TODO (bonus): Add error handling for a user attempting
-    # to divide by zero.
-    pass
+    headers = [('Content-type', 'text/html')]
+
+    try:
+
+        path = environ.get('PATH_INFO', None)
+        if path is None:
+            raise NameError
+
+        func, args = resolve_path(path)
+        body = str(func(*args))
+        status = "200 OK"
+
+    except CalculatorBadRequestURLExc:
+        status = "400 Bad Request"
+        body  = "<h1>HTTP 400 Bad Request</h1>"
+        body += "<h2>Unable to parse out the URL<br></h2>"
+        body += "<h2>Go to <a href='http://localhost:8080/'> http://localhost:8080/</a> for usage instructions</h2>"
+    except CalculatorBadRequestDivBy0Exc:
+        status = "400 Bad Request"
+        body  = "<h1>HTTP 400 Bad Request</h1>"
+        body += "<h2>Can't divide-by-0<br></h2>"
+        body += "<h2>Go to <a href='http://localhost:8080/'> http://localhost:8080/</a> for usage instructions</h2>"
+    except NameError:
+        status = "404 Not Found"
+        body = "<h1>HTTP 404 Not Found</h1>"
+    except Exception:
+        status = "500 Internal Server Error"
+        body = "<h1>HTTP 500 Internal Server Error</h1>"
+    finally:
+        headers.append(('Content-Length', str(len(body))))
+        start_response(status, headers)
+        return [body.encode('utf8')]
 
 if __name__ == '__main__':
-    # TODO: Insert the same boilerplate wsgiref simple
-    # server creation that you used in the book database.
-    pass
+    from wsgiref.simple_server import make_server
+    srv = make_server('localhost', 8080, application)
+    srv.serve_forever()
+

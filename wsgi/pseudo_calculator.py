@@ -21,6 +21,8 @@ Consider the following URL/Response body pairs as tests:
 
 """
 
+
+
 def resolve_path(path):
     """
     Should return two values: a callable and an iterable of

@@ -43,7 +43,8 @@ def resolve_uri(uri):
 
     Both content and mime type should be expressed as bytes
     """
-    root_path = pathlib.Path('./webroot')
+    #root_path = pathlib.Path('./webroot')
+    root_path = pathlib.Path('./')
     resource_path = root_path / uri.lstrip('/')
     if resource_path.is_dir():
         # the resource is a directory, content type is text/html, produce a
@@ -56,7 +57,9 @@ def resolve_uri(uri):
         mime_type = 'text/plain'.encode('utf8')
     elif resource_path.is_file():
         # the resource is a file, figure out its mime type and read
-        content = resource_path.read_bytes()
+        with resource_path.open("rb") as fh:
+        # content = resource_path.read_bytes()
+            content = fh.read()
         mime_type = mimetypes.guess_type(str(resource_path))[0].encode('utf8')
     else:
         raise NameError()
@@ -65,7 +68,7 @@ def resolve_uri(uri):
 
 
 def server(log_buffer=sys.stderr):
-    address = ('127.0.0.1', 10000)
+    address = ('127.0.0.1', 10001)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     print("making a server on {0}:{1}".format(*address), file=log_buffer)
